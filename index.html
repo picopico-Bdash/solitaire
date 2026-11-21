@@ -9,7 +9,7 @@
 html,body{width:100%;height:100%;overflow:hidden;background:#082116;
   font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;
   user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-#stage{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden;touch-action:none;
+#stage{position:absolute;left:0;top:0;overflow:hidden;touch-action:none;
   background:radial-gradient(ellipse at 50% 35%,#23845a 0%,#166140 55%,#0e452d 100%);
   box-shadow:0 0 40px rgba(0,0,0,.5)}
 /* top bar */
@@ -108,47 +108,55 @@ const SUITS=['♠','♥','♦','♣'];
 const RANKS=['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 const isMobile=matchMedia('(pointer:coarse)').matches||/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
-// ---- geometry ----
-const W=isMobile?360:840, H=isMobile?640:620;
-const TOP=isMobile?40:52, BOTTOM=isMobile?52:0;
-const GAP=isMobile?4:14;
-const CW=Math.min(90,Math.floor((W-GAP*8)/7));
-const CH=Math.round(CW*1.4);
-const X0=Math.round((W-(7*CW+6*GAP))/2);
-const topY=TOP+(isMobile?8:16);
-const tabY=topY+CH+(isMobile?12:20);
-const maxY=H-BOTTOM-(isMobile?6:12);
-const DOWN=Math.round(CH*(isMobile?.13:.11));
-const UP=Math.round(CH*(isMobile?.31:.26));
-const WOFF=Math.round(CW*(isMobile?.28:.3));
+// ---- geometry（ブラウザの表示領域いっぱいに合わせる） ----
+let W,H,TOP,BOTTOM,GAP,CW,CH,X0,topY,tabY,maxY,DOWN,UP,WOFF,compact;
+const scale=1;
 const colX=i=>X0+i*(CW+GAP);
-
 const $=id=>document.getElementById(id);
 const stage=$('stage'), layer=$('cards'), slotsEl=$('slots');
-stage.classList.add(isMobile?'mobile':'pc');
-stage.style.width=W+'px'; stage.style.height=H+'px';
-stage.style.setProperty('--cw',CW+'px'); stage.style.setProperty('--ch',CH+'px');
 
-let scale=1;
-function fit(){
-  const vw=innerWidth, vh=innerHeight;
-  scale=Math.min(vw/W,vh/H); if(!isMobile) scale=Math.min(scale,1.6);
-  const l=(vw-W*scale)/2, t=(vh-H*scale)/2;
-  stage.style.transform=`translate(${l}px,${t}px) scale(${scale})`;
+function calcGeometry(){
+  W=Math.max(300,document.documentElement.clientWidth||innerWidth);
+  H=Math.max(300,document.documentElement.clientHeight||innerHeight);
+  compact=isMobile||W<640;               // 狭い画面はボタンを下に
+  TOP=compact?40:52; BOTTOM=compact?52:0;
+  GAP=compact?Math.max(4,Math.round(W*.011)):Math.round(Math.min(18,Math.max(8,W*.012)));
+  const byW=(W-GAP*8)/7;
+  const byH=(H-TOP-BOTTOM-40)/3.3/1.4;    // 上段＋場札が十分見える高さ
+  CW=Math.floor(Math.max(28,Math.min(byW,byH,150)));
+  CH=Math.round(CW*1.4);
+  X0=Math.round((W-(7*CW+6*GAP))/2);
+  topY=TOP+(compact?8:16);
+  tabY=topY+CH+(compact?12:20);
+  maxY=H-BOTTOM-(compact?6:12);
+  DOWN=Math.round(CH*(compact?.13:.11));
+  UP=Math.round(CH*(compact?.31:.26));
+  WOFF=Math.round(CW*(compact?.28:.3));
+  stage.classList.toggle('mobile',compact); stage.classList.toggle('pc',!compact);
+  stage.style.width=W+'px'; stage.style.height=H+'px';
+  stage.style.setProperty('--cw',CW+'px'); stage.style.setProperty('--ch',CH+'px');
 }
-addEventListener('resize',fit); fit();
+calcGeometry();
 
 // ---- slots ----
-function mkSlot(x,y,txt,id){
+function mkSlot(txt,id){
   const d=document.createElement('div'); d.className='slot';
-  if(id) d.id=id;
-  Object.assign(d.style,{left:x+'px',top:y+'px',width:CW+'px',height:CH+'px',fontSize:(CW*.4)+'px'});
-  d.textContent=txt; slotsEl.appendChild(d); return d;
+  if(id) d.id=id; d.textContent=txt; slotsEl.appendChild(d); return d;
 }
-const stockSlot=mkSlot(colX(0),topY,'↻','stockSlot');
-const foundSlots=[0,1,2,3].map(i=>mkSlot(colX(3+i),topY,'A'));
-const tabSlots=[0,1,2,3,4,5,6].map(i=>mkSlot(colX(i),tabY,'K'));
+function posSlot(d,x,y){
+  Object.assign(d.style,{left:x+'px',top:y+'px',width:CW+'px',height:CH+'px',fontSize:(CW*.4)+'px',
+    borderRadius:(CW*.1)+'px'});
+}
+const stockSlot=mkSlot('↻','stockSlot');
+const foundSlots=[0,1,2,3].map(()=>mkSlot('A'));
+const tabSlots=[0,1,2,3,4,5,6].map(()=>mkSlot('K'));
 tabSlots.forEach(s=>{s.style.color='rgba(255,255,255,.14)'});
+function positionSlots(){
+  posSlot(stockSlot,colX(0),topY);
+  foundSlots.forEach((d,i)=>posSlot(d,colX(3+i),topY));
+  tabSlots.forEach((d,i)=>posSlot(d,colX(i),tabY));
+}
+positionSlots();
 
 // ---- cards ----
 const cards=[];
@@ -502,6 +510,18 @@ function newGame(mode){
   setTimeout(()=>cards.forEach(c=>c.el.style.transitionDelay=''),900);
   updateStats();
 }
+let rzT=null;
+function onResize(){
+  clearTimeout(rzT);
+  rzT=setTimeout(()=>{
+    if(drag)return;
+    calcGeometry(); positionSlots();
+    layer.classList.add('noanim'); layout(); void layer.offsetWidth; layer.classList.remove('noanim');
+    if(animOn||won){cv.width=W*Math.min(2,devicePixelRatio||1);cv.height=H*Math.min(2,devicePixelRatio||1);cv.style.width=W+'px';cv.style.height=H+'px'}
+  },80);
+}
+addEventListener('resize',onResize);
+addEventListener('orientationchange',onResize);
 newGame();
 })();
 </script>
