@@ -58,6 +58,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#082116;
   background:repeating-linear-gradient(45deg,#c73c3c 0 3px,#a92f2f 3px 6px);
   box-shadow:inset 0 0 0 2px rgba(255,255,255,.35)}
 .card.drag{transition:none;box-shadow:0 10px 18px rgba(0,0,0,.45)}
+.card.sel{box-shadow:0 0 0 3px #4fc3ff,0 0 12px #4fc3ff;translate:0 -3px}
 .card.hint,.slot.hint{box-shadow:0 0 0 3px #ffd84a,0 0 14px #ffd84a}
 .shake{animation:shake .28s}
 @keyframes shake{0%,100%{translate:0}25%{translate:-4px}75%{translate:4px}}
@@ -245,6 +246,7 @@ function snapshot(){
 function pushUndo(){undoStack.push(snapshot()); if(undoStack.length>300)undoStack.shift()}
 function undo(){
   if(busy||won||!undoStack.length)return;
+  clearSel();
   const s=undoStack.pop(), g=id=>cards[id];
   stock=s.stock.map(g);waste=s.waste.map(g);found=s.found.map(a=>a.map(g));tab=s.tab.map(a=>a.map(g));
   cards.forEach((c,k)=>c.up=s.up[k]); score=s.score; moves=s.moves+1;
@@ -253,6 +255,7 @@ function undo(){
 
 // ---- moves ----
 function doMove(from,to,n,record=true){
+  clearSel();
   if(record) pushUndo();
   const src=pileArr(from), moved=src.splice(src.length-n,n);
   pileArr(to).push(...moved);
@@ -305,9 +308,11 @@ stage.addEventListener('pointerdown',e=>{
   if(e.target.closest('#tools')||e.target.closest('#modal'))return;
   if(busy||won||drag)return;
   clearHint();
-  // 山札エリア：カードが残っていればめくる／空ならめくり済みを裏返して戻す
   const sp=toStage(e);
-  if(sp.x>=colX(0)-6&&sp.x<=colX(0)+CW+6&&sp.y>=topY-6&&sp.y<=topY+CH+6){clickStock();e.preventDefault();return}
+  // 山札エリア：カードが残っていればめくる／空ならめくり済みを裏返して戻す
+  if(sp.x>=colX(0)-6&&sp.x<=colX(0)+CW+6&&sp.y>=topY-6&&sp.y<=topY+CH+6){clearSel();clickStock();e.preventDefault();return}
+  // 選択中：タップした場所へ置く
+  if(sel){tapTarget(e,sp);e.preventDefault();return}
   const el=e.target.closest('.card');
   if(!el)return;
   const c=cards[+el.dataset.id], w=where(c);
@@ -315,8 +320,7 @@ stage.addEventListener('pointerdown',e=>{
   if(!c.up)return;
   if((w.type==='waste'||w.type==='found')&&w.idx!==pileArr(w).length-1)return;
   const group=w.type==='tab'?tab[w.i].slice(w.idx):[c];
-  const p=toStage(e);
-  drag={group,from:w,sx:p.x,sy:p.y,moved:false,pid:e.pointerId,orig:group.map(g=>({x:g.x,y:g.y}))};
+  drag={group,from:w,sx:sp.x,sy:sp.y,moved:false,pid:e.pointerId,orig:group.map(g=>({x:g.x,y:g.y}))};
   e.preventDefault();
 });
 addEventListener('pointermove',e=>{
@@ -324,7 +328,7 @@ addEventListener('pointermove',e=>{
   const p=toStage(e), dx=p.x-drag.sx, dy=p.y-drag.sy;
   if(!drag.moved){
     if(Math.hypot(dx,dy)<6)return;
-    drag.moved=true;
+    drag.moved=true; clearSel();
     drag.group.forEach((g,k)=>{g.el.classList.add('drag');g.el.style.zIndex=2000+k});
   }
   drag.group.forEach((g,k)=>{g.el.style.left=(drag.orig[k].x+dx)+'px';g.el.style.top=(drag.orig[k].y+dy)+'px'});
@@ -332,7 +336,7 @@ addEventListener('pointermove',e=>{
 function endDrag(e){
   if(!drag||e.pointerId!==drag.pid)return;
   const d=drag; drag=null;
-  if(!d.moved){tapMove(d);return}
+  if(!d.moved){select(d);return}
   d.group.forEach(g=>g.el.classList.remove('drag'));
   const lead=d.group[0];
   const lx=parseFloat(lead.el.style.left), ly=parseFloat(lead.el.style.top);
@@ -355,21 +359,55 @@ function endDrag(e){
 addEventListener('pointerup',endDrag);
 addEventListener('pointercancel',endDrag);
 
-function tapMove(d){
-  const g=d.group, lead=g[0], from=d.from;
-  if(g.length===1&&from.type!=='found'){
-    const f=findFound(lead); if(f>=0){doMove(from,{type:'found',i:f},1);return}
+// ---- タップ操作：カードを選択 → 置きたい場所をタップ ----
+let sel=null;
+function select(d){
+  clearSel();
+  sel={group:d.group,from:d.from};
+  d.group.forEach(c=>c.el.classList.add('sel'));
+}
+function clearSel(){
+  if(sel) sel.group.forEach(c=>c.el.classList.remove('sel'));
+  sel=null;
+}
+// タップ位置から置き場所（組札 or 場札の列）を求める
+function hitPile(e,sp){
+  const el=e.target.closest('.card');
+  if(el){const w=where(cards[+el.dataset.id]); if(w.type==='found'||w.type==='tab')return{type:w.type,i:w.i}}
+  let col=-1;
+  for(let i=0;i<7;i++){if(sp.x>=colX(i)-GAP/2&&sp.x<colX(i)+CW+GAP/2){col=i;break}}
+  if(col<0)return null;
+  if(sp.y>=topY&&sp.y<=topY+CH) return col>=3?{type:'found',i:col-3}:null;
+  if(sp.y>=tabY-GAP) return{type:'tab',i:col};
+  return null;
+}
+function tapTarget(e,sp){
+  const s=sel; clearSel();
+  // 選択中のカード自身をタップしたら選択解除
+  const el=e.target.closest('.card');
+  if(el&&s.group.includes(cards[+el.dataset.id]))return;
+  const t=hitPile(e,sp), lead=s.group[0];
+  if(t&&!(t.type===s.from.type&&t.i===s.from.i)){
+    if(t.type==='found'&&s.group.length===1&&canFound(lead,t.i)){doMove(s.from,t,1);return}
+    if(t.type==='tab'&&canTab(lead,t.i)){doMove(s.from,t,s.group.length);return}
   }
-  let empty=-1;
-  for(let k=1;k<=7;k++){
-    const i=from.type==='tab'?(from.i+k)%7:k-1;
-    if(from.type==='tab'&&i===from.i)continue;
-    if(!canTab(lead,i))continue;
-    if(tab[i].length){doMove(from,{type:'tab',i},g.length);return}
-    if(empty<0&&!(from.type==='tab'&&from.idx===0)) empty=i;
-  }
-  if(empty>=0){doMove(from,{type:'tab',i:empty},g.length);return}
-  g.forEach(c=>{c.el.classList.remove('shake');void c.el.offsetWidth;c.el.classList.add('shake')});
+  buzz();
+  s.group.forEach(c=>{c.el.classList.remove('shake');void c.el.offsetWidth;c.el.classList.add('shake')});
+}
+let actx=null;
+function buzz(){
+  try{
+    actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==='suspended')actx.resume();
+    const t=actx.currentTime, o=actx.createOscillator(), g=actx.createGain();
+    o.type='square'; o.frequency.setValueAtTime(140,t);
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(0.18,t+0.01);
+    g.gain.setValueAtTime(0.18,t+0.28);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+0.34);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t+0.36);
+  }catch(err){}
+  if(navigator.vibrate)navigator.vibrate(120);
 }
 
 // ---- hint ----
@@ -382,6 +420,7 @@ function targetEl(t){
 }
 function hint(){
   if(busy||won)return;
+  clearSel();
   const tops=[];
   if(waste.length)tops.push(last(waste));
   tab.forEach(p=>{if(p.length)tops.push(last(p))});
@@ -491,7 +530,7 @@ function winAnim(){
 // ---- new game ----
 function newGame(mode){
   if(mode){drawN=mode;store.mode=mode;save()}
-  animOn=false;cv.style.display='none';clearHint();hideModal();
+  animOn=false;cv.style.display='none';clearHint();clearSel();hideModal();
   cards.forEach(c=>{c.el.style.visibility='';c.el.style.transitionDelay='';c.up=false});
   const deck=cards.slice();
   for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]]}
