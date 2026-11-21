@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>ソリティア | PicoPico B'</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#082116;
+  font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#stage{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden;touch-action:none;
+  background:radial-gradient(ellipse at 50% 35%,#23845a 0%,#166140 55%,#0e452d 100%);
+  box-shadow:0 0 40px rgba(0,0,0,.5)}
+/* top bar */
+#top{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:10px;
+  padding:0 10px;color:#fff;background:rgba(0,0,0,.28);z-index:5}
+#title{font-weight:800;letter-spacing:.05em;white-space:nowrap}
+#mode{font-size:11px;font-weight:700;padding:2px 7px;border-radius:99px;background:#ffd84a;color:#3a2c00;white-space:nowrap}
+#stats{margin-left:auto;display:flex;gap:10px;font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
+#stats b{font-weight:800;margin-left:3px}
+#tools{position:absolute;display:flex;gap:6px;z-index:5}
+#tools button{border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.14);color:#fff;
+  font:700 13px inherit;font-family:inherit;border-radius:10px;padding:0 12px;height:36px;cursor:pointer}
+#tools button:active{background:rgba(255,255,255,.3)}
+#tools button:disabled{opacity:.35}
+.mobile #top{height:40px}
+.mobile #title{font-size:15px}
+.mobile #stats{font-size:12px;gap:8px}
+.mobile #tools{left:0;right:0;bottom:0;height:52px;padding:8px;background:rgba(0,0,0,.3)}
+.mobile #tools button{flex:1;height:36px}
+.pc #top{height:52px;padding:0 16px}
+.pc #title{font-size:19px}
+.pc #stats{margin-left:16px;font-size:14px}
+.pc #tools{right:14px;top:8px}
+@media (hover:hover){#tools button:hover{background:rgba(255,255,255,.24)}}
+/* slots */
+.slot{position:absolute;border-radius:7px;border:2px solid rgba(255,255,255,.22);background:rgba(0,0,0,.08);
+  display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);font-weight:800}
+#stockSlot{cursor:pointer}
+/* cards */
+#cards{position:absolute;inset:0;pointer-events:none}
+#cards .card{pointer-events:auto}
+#cards.noanim .card{transition:none!important}
+.card{position:absolute;border-radius:calc(var(--cw)*.1);background:#fff;
+  width:var(--cw);height:var(--ch);
+  box-shadow:0 1px 2px rgba(0,0,0,.4),inset 0 0 0 1px rgba(0,0,0,.12);
+  transition:left .2s ease,top .2s ease;cursor:pointer;overflow:hidden}
+.card .tl{position:absolute;left:5%;top:2%;font-weight:800;font-size:calc(var(--cw)*.34);line-height:1;letter-spacing:-.06em}
+.card .tr{position:absolute;right:6%;top:3%;font-size:calc(var(--cw)*.3);line-height:1}
+.card .mid{position:absolute;left:0;right:0;bottom:7%;text-align:center;font-size:calc(var(--cw)*.6);line-height:1}
+.card .face{position:absolute;left:0;right:0;bottom:9%;text-align:center;font-weight:900;
+  font-size:calc(var(--cw)*.5);line-height:1;font-family:Georgia,"Times New Roman",serif}
+.card.red{color:#d42b2b}.card.black{color:#1c1c1c}
+.card.down>*{display:none}
+.card.down{background:#fff}
+.card.down::after{content:"";position:absolute;inset:6%;border-radius:calc(var(--cw)*.07);
+  background:repeating-linear-gradient(45deg,#c73c3c 0 3px,#a92f2f 3px 6px);
+  box-shadow:inset 0 0 0 2px rgba(255,255,255,.35)}
+.card.drag{transition:none;box-shadow:0 10px 18px rgba(0,0,0,.45)}
+.card.hint,.slot.hint{box-shadow:0 0 0 3px #ffd84a,0 0 14px #ffd84a}
+.shake{animation:shake .28s}
+@keyframes shake{0%,100%{translate:0}25%{translate:-4px}75%{translate:4px}}
+/* overlay */
+#fx{position:absolute;left:0;top:0;pointer-events:none;display:none;z-index:3000}
+#modal{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.4);z-index:4000}
+.box{background:#fff;color:#1d2b24;border-radius:16px;padding:22px 22px 18px;width:min(300px,86%);
+  text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.box h2{font-size:22px;margin-bottom:10px}
+.box p{font-size:14px;line-height:1.8;margin-bottom:6px}
+.box .best{font-size:12px;color:#6b7a72;margin-bottom:12px}
+.box button{display:block;width:100%;margin-top:8px;height:42px;border:none;border-radius:10px;
+  font:700 15px inherit;font-family:inherit;cursor:pointer;background:#1a7a4c;color:#fff}
+.box button.sub{background:#e7eeea;color:#1d2b24}
+#toast{position:absolute;left:50%;bottom:70px;transform:translateX(-50%);background:rgba(0,0,0,.78);
+  color:#fff;font-size:13px;padding:8px 14px;border-radius:99px;white-space:nowrap;opacity:0;
+  transition:opacity .25s;pointer-events:none;z-index:3500}
+.pc #toast{bottom:24px}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="top">
+    <div id="title">ソリティア</div>
+    <div id="mode">1枚めくり</div>
+    <div id="stats">
+      <span>⏱<b id="sTime">0:00</b></span>
+      <span>手数<b id="sMoves">0</b></span>
+      <span>点<b id="sScore">0</b></span>
+    </div>
+  </div>
+  <div id="slots"></div>
+  <div id="cards"></div>
+  <div id="tools">
+    <button id="bNew">新しいゲーム</button>
+    <button id="bUndo">↶ 戻す</button>
+    <button id="bHint">💡 ヒント</button>
+  </div>
+  <canvas id="fx"></canvas>
+  <div id="toast"></div>
+  <div id="modal"></div>
+</div>
+<script>
+(()=>{
+'use strict';
+const SUITS=['♠','♥','♦','♣'];
+const RANKS=['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const isMobile=matchMedia('(pointer:coarse)').matches||/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
+// ---- geometry ----
+const W=isMobile?360:840, H=isMobile?640:620;
+const TOP=isMobile?40:52, BOTTOM=isMobile?52:0;
+const GAP=isMobile?4:14;
+const CW=Math.min(90,Math.floor((W-GAP*8)/7));
+const CH=Math.round(CW*1.4);
+const X0=Math.round((W-(7*CW+6*GAP))/2);
+const topY=TOP+(isMobile?8:16);
+const tabY=topY+CH+(isMobile?12:20);
+const maxY=H-BOTTOM-(isMobile?6:12);
+const DOWN=Math.round(CH*(isMobile?.13:.11));
+const UP=Math.round(CH*(isMobile?.31:.26));
+const WOFF=Math.round(CW*(isMobile?.28:.3));
+const colX=i=>X0+i*(CW+GAP);
+
+const $=id=>document.getElementById(id);
+const stage=$('stage'), layer=$('cards'), slotsEl=$('slots');
+stage.classList.add(isMobile?'mobile':'pc');
+stage.style.width=W+'px'; stage.style.height=H+'px';
+stage.style.setProperty('--cw',CW+'px'); stage.style.setProperty('--ch',CH+'px');
+
+let scale=1;
+function fit(){
+  const vw=innerWidth, vh=innerHeight;
+  scale=Math.min(vw/W,vh/H); if(!isMobile) scale=Math.min(scale,1.6);
+  const l=(vw-W*scale)/2, t=(vh-H*scale)/2;
+  stage.style.transform=`translate(${l}px,${t}px) scale(${scale})`;
+}
+addEventListener('resize',fit); fit();
+
+// ---- slots ----
+function mkSlot(x,y,txt,id){
+  const d=document.createElement('div'); d.className='slot';
+  if(id) d.id=id;
+  Object.assign(d.style,{left:x+'px',top:y+'px',width:CW+'px',height:CH+'px',fontSize:(CW*.4)+'px'});
+  d.textContent=txt; slotsEl.appendChild(d); return d;
+}
+const stockSlot=mkSlot(colX(0),topY,'↻','stockSlot');
+const foundSlots=[0,1,2,3].map(i=>mkSlot(colX(3+i),topY,'A'));
+const tabSlots=[0,1,2,3,4,5,6].map(i=>mkSlot(colX(i),tabY,'K'));
+tabSlots.forEach(s=>{s.style.color='rgba(255,255,255,.14)'});
+
+// ---- cards ----
+const cards=[];
+for(let s=0;s<4;s++)for(let r=1;r<=13;r++){
+  const c={id:cards.length,suit:s,rank:r,up:false,x:0,y:0,z:0};
+  const el=document.createElement('div');
+  el.className='card down '+(s===1||s===2?'red':'black');
+  el.dataset.id=c.id;
+  const center=r>10?`<div class="face">${RANKS[r]}</div>`:`<div class="mid">${SUITS[s]}</div>`;
+  el.innerHTML=`<div class="tl">${RANKS[r]}</div><div class="tr">${SUITS[s]}</div>${center}`;
+  c.el=el; layer.appendChild(el); cards.push(c);
+}
+const isRed=c=>c.suit===1||c.suit===2;
+
+// ---- state ----
+let stock=[],waste=[],found=[[],[],[],[]],tab=[[],[],[],[],[],[],[]];
+let drawN=1,score=0,moves=0,time=0,started=false,won=false,busy=false;
+let undoStack=[];
+let store={};
+try{store=JSON.parse(localStorage.getItem('picopico_solitaire')||'{}')}catch(e){store={}}
+const save=()=>{try{localStorage.setItem('picopico_solitaire',JSON.stringify(store))}catch(e){}};
+if(store.mode===3) drawN=3;
+
+function pileArr(p){
+  if(p.type==='stock')return stock; if(p.type==='waste')return waste;
+  if(p.type==='found')return found[p.i]; return tab[p.i];
+}
+function where(c){
+  let k=stock.indexOf(c); if(k>=0)return{type:'stock',idx:k};
+  k=waste.indexOf(c); if(k>=0)return{type:'waste',idx:k};
+  for(let i=0;i<4;i++){k=found[i].indexOf(c); if(k>=0)return{type:'found',i,idx:k}}
+  for(let i=0;i<7;i++){k=tab[i].indexOf(c); if(k>=0)return{type:'tab',i,idx:k}}
+  return null;
+}
+const last=a=>a[a.length-1];
+
+// ---- layout ----
+function place(c,x,y,z){
+  c.x=x;c.y=y;c.z=z;
+  c.el.style.left=x+'px'; c.el.style.top=y+'px'; c.el.style.zIndex=z;
+  c.el.classList.toggle('down',!c.up);
+}
+function tabPositions(i){
+  const p=tab[i]; let sum=0;
+  for(let k=0;k<p.length-1;k++) sum+=p[k].up?UP:DOWN;
+  const avail=maxY-tabY-CH; const f=sum>avail&&sum>0?avail/sum:1;
+  const ys=[]; let y=tabY;
+  p.forEach(c=>{ys.push(y); y+=(c.up?UP:DOWN)*f});
+  return ys;
+}
+function layout(){
+  stock.forEach((c,k)=>{c.up=false; const o=Math.floor(k/12); place(c,colX(0)-o,topY-o,100+k)});
+  const start=drawN===3?Math.max(0,waste.length-3):waste.length;
+  waste.forEach((c,k)=>{let x=colX(1); if(drawN===3&&k>=start)x+=(k-start)*WOFF; place(c,x,topY,200+k)});
+  found.forEach((p,i)=>p.forEach((c,k)=>place(c,colX(3+i),topY,300+k)));
+  tab.forEach((p,i)=>{const ys=tabPositions(i); p.forEach((c,k)=>place(c,colX(i),ys[k],400+k))});
+  stockSlot.textContent=waste.length?'↻':'';
+}
+let liftT=null;
+function lift(arr){
+  arr.forEach((c,k)=>c.el.style.zIndex=1500+k);
+  setTimeout(()=>arr.forEach(c=>c.el.style.zIndex=c.z),230);
+}
+
+// ---- rules ----
+function canFound(c,i){
+  const f=found[i]; if(!f.length) return c.rank===1;
+  const t=last(f); return t.suit===c.suit&&c.rank===t.rank+1;
+}
+function canTab(c,i){
+  const p=tab[i]; if(!p.length) return c.rank===13;
+  const t=last(p); return t.up&&isRed(t)!==isRed(c)&&c.rank===t.rank-1;
+}
+function findFound(c){
+  for(let i=0;i<4;i++) if(found[i].length&&canFound(c,i)) return i;
+  for(let i=0;i<4;i++) if(canFound(c,i)) return i;
+  return -1;
+}
+
+// ---- undo ----
+function snapshot(){
+  const ids=a=>a.map(c=>c.id);
+  return{stock:ids(stock),waste:ids(waste),found:found.map(ids),tab:tab.map(ids),
+    up:cards.map(c=>c.up),score,moves};
+}
+function pushUndo(){undoStack.push(snapshot()); if(undoStack.length>300)undoStack.shift()}
+function undo(){
+  if(busy||won||!undoStack.length)return;
+  const s=undoStack.pop(), g=id=>cards[id];
+  stock=s.stock.map(g);waste=s.waste.map(g);found=s.found.map(a=>a.map(g));tab=s.tab.map(a=>a.map(g));
+  cards.forEach((c,k)=>c.up=s.up[k]); score=s.score; moves=s.moves+1;
+  layout(); updateStats();
+}
+
+// ---- moves ----
+function doMove(from,to,n,record=true){
+  if(record) pushUndo();
+  const src=pileArr(from), moved=src.splice(src.length-n,n);
+  pileArr(to).push(...moved);
+  if(to.type==='found') score+=10;
+  if(from.type==='waste'&&to.type==='tab') score+=5;
+  if(from.type==='found'&&to.type==='tab') score-=15;
+  if(from.type==='tab'){const p=tab[from.i]; if(p.length&&!last(p).up){last(p).up=true;score+=5}}
+  score=Math.max(0,score); moves++; started=true;
+  layout(); lift(moved); updateStats(); afterMove();
+}
+function clickStock(){
+  if(busy||won)return;
+  if(stock.length){
+    pushUndo(); const drawn=[];
+    for(let k=0;k<drawN&&stock.length;k++){const c=stock.pop();c.up=true;waste.push(c);drawn.push(c)}
+    moves++; started=true; layout(); lift(drawn);
+  }else if(waste.length){
+    pushUndo();
+    while(waste.length){const c=waste.pop();c.up=false;stock.push(c)}
+    if(drawN===1) score=Math.max(0,score-100);
+    moves++; started=true; layout();
+  }else return;
+  updateStats(); afterMove();
+}
+function afterMove(){
+  if(found.reduce((a,f)=>a+f.length,0)===52){win();return}
+  if(!busy&&!stock.length&&!waste.length&&tab.every(p=>p.every(c=>c.up))) autoFinish();
+}
+function autoFinish(){
+  busy=true; updateStats();
+  const tick=()=>{
+    if(won)return;
+    let best=null;
+    for(let i=0;i<7;i++){const c=last(tab[i]); if(c&&findFound(c)>=0&&(!best||c.rank<best.c.rank))best={c,i}}
+    if(!best){busy=false;updateStats();return}
+    doMoveSilent(best.i);
+    setTimeout(tick,90);
+  };
+  tick();
+}
+function doMoveSilent(i){
+  const c=last(tab[i]), f=findFound(c);
+  doMove({type:'tab',i},{type:'found',i:f},1,false);
+}
+
+// ---- input ----
+let drag=null;
+function toStage(e){const r=stage.getBoundingClientRect();return{x:(e.clientX-r.left)/scale,y:(e.clientY-r.top)/scale}}
+stage.addEventListener('pointerdown',e=>{
+  if(e.target.closest('#tools')||e.target.closest('#modal'))return;
+  if(busy||won||drag)return;
+  clearHint();
+  // 山札エリア：カードが残っていればめくる／空ならめくり済みを裏返して戻す
+  const sp=toStage(e);
+  if(sp.x>=colX(0)-6&&sp.x<=colX(0)+CW+6&&sp.y>=topY-6&&sp.y<=topY+CH+6){clickStock();e.preventDefault();return}
+  const el=e.target.closest('.card');
+  if(!el)return;
+  const c=cards[+el.dataset.id], w=where(c);
+  if(w.type==='stock'){clickStock();e.preventDefault();return}
+  if(!c.up)return;
+  if((w.type==='waste'||w.type==='found')&&w.idx!==pileArr(w).length-1)return;
+  const group=w.type==='tab'?tab[w.i].slice(w.idx):[c];
+  const p=toStage(e);
+  drag={group,from:w,sx:p.x,sy:p.y,moved:false,pid:e.pointerId,orig:group.map(g=>({x:g.x,y:g.y}))};
+  e.preventDefault();
+});
+addEventListener('pointermove',e=>{
+  if(!drag||e.pointerId!==drag.pid)return;
+  const p=toStage(e), dx=p.x-drag.sx, dy=p.y-drag.sy;
+  if(!drag.moved){
+    if(Math.hypot(dx,dy)<6)return;
+    drag.moved=true;
+    drag.group.forEach((g,k)=>{g.el.classList.add('drag');g.el.style.zIndex=2000+k});
+  }
+  drag.group.forEach((g,k)=>{g.el.style.left=(drag.orig[k].x+dx)+'px';g.el.style.top=(drag.orig[k].y+dy)+'px'});
+});
+function endDrag(e){
+  if(!drag||e.pointerId!==drag.pid)return;
+  const d=drag; drag=null;
+  if(!d.moved){tapMove(d);return}
+  d.group.forEach(g=>g.el.classList.remove('drag'));
+  const lead=d.group[0];
+  const lx=parseFloat(lead.el.style.left), ly=parseFloat(lead.el.style.top);
+  const ov=(x,y,w,h)=>Math.max(0,Math.min(lx+CW,x+w)-Math.max(lx,x))*Math.max(0,Math.min(ly+CH,y+h)-Math.max(ly,y));
+  let best=null,bestA=0;
+  if(d.group.length===1) for(let i=0;i<4;i++){
+    if(d.from.type==='found'&&d.from.i===i)continue;
+    if(!canFound(lead,i))continue;
+    const a=ov(colX(3+i),topY,CW,CH); if(a>bestA){bestA=a;best={type:'found',i}}
+  }
+  for(let i=0;i<7;i++){
+    if(d.from.type==='tab'&&d.from.i===i)continue;
+    if(!canTab(lead,i))continue;
+    const p=tab[i]; const bottom=p.length?last(p).y+CH:tabY+CH;
+    const a=ov(colX(i),tabY,CW,bottom-tabY); if(a>bestA){bestA=a;best={type:'tab',i}}
+  }
+  if(best) doMove(d.from,best,d.group.length);
+  else{layout();lift(d.group)}
+}
+addEventListener('pointerup',endDrag);
+addEventListener('pointercancel',endDrag);
+
+function tapMove(d){
+  const g=d.group, lead=g[0], from=d.from;
+  if(g.length===1&&from.type!=='found'){
+    const f=findFound(lead); if(f>=0){doMove(from,{type:'found',i:f},1);return}
+  }
+  let empty=-1;
+  for(let k=1;k<=7;k++){
+    const i=from.type==='tab'?(from.i+k)%7:k-1;
+    if(from.type==='tab'&&i===from.i)continue;
+    if(!canTab(lead,i))continue;
+    if(tab[i].length){doMove(from,{type:'tab',i},g.length);return}
+    if(empty<0&&!(from.type==='tab'&&from.idx===0)) empty=i;
+  }
+  if(empty>=0){doMove(from,{type:'tab',i:empty},g.length);return}
+  g.forEach(c=>{c.el.classList.remove('shake');void c.el.offsetWidth;c.el.classList.add('shake')});
+}
+
+// ---- hint ----
+let hintT=null;
+function clearHint(){document.querySelectorAll('.hint').forEach(e=>e.classList.remove('hint'));clearTimeout(hintT)}
+function showHint(els){clearHint();els.forEach(e=>e&&e.classList.add('hint'));hintT=setTimeout(clearHint,1600)}
+function targetEl(t){
+  if(t.type==='found')return found[t.i].length?last(found[t.i]).el:foundSlots[t.i];
+  return tab[t.i].length?last(tab[t.i]).el:tabSlots[t.i];
+}
+function hint(){
+  if(busy||won)return;
+  const tops=[];
+  if(waste.length)tops.push(last(waste));
+  tab.forEach(p=>{if(p.length)tops.push(last(p))});
+  for(const c of tops){const f=findFound(c);if(f>=0){showHint([c.el,targetEl({type:'found',i:f})]);return}}
+  for(let i=0;i<7;i++){
+    const p=tab[i]; const fu=p.findIndex(c=>c.up); if(fu<0)continue;
+    const lead=p[fu];
+    for(let j=0;j<7;j++){
+      if(j===i||!canTab(lead,j))continue;
+      if(fu===0&&!tab[j].length)continue;
+      if(fu===0&&lead.rank===13)continue;
+      showHint([...p.slice(fu).map(c=>c.el),targetEl({type:'tab',i:j})]);return;
+    }
+  }
+  if(waste.length){
+    const c=last(waste);
+    for(let j=0;j<7;j++) if(canTab(c,j)){showHint([c.el,targetEl({type:'tab',i:j})]);return}
+  }
+  if(stock.length){showHint([last(stock).el]);return}
+  if(waste.length){showHint([stockSlot]);toast('山札をめくり直しましょう');return}
+  toast('動かせる手がありません');
+}
+
+// ---- UI ----
+const fmt=t=>Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
+function updateStats(){
+  $('sTime').textContent=fmt(time);$('sMoves').textContent=moves;$('sScore').textContent=score;
+  $('bUndo').disabled=!undoStack.length||busy||won;
+  $('mode').textContent=drawN===3?'3枚めくり':'1枚めくり';
+}
+setInterval(()=>{if(started&&!won&&!document.hidden){time++;$('sTime').textContent=fmt(time)}},1000);
+let toastT=null;
+function toast(msg){const t=$('toast');t.textContent=msg;t.style.opacity=1;clearTimeout(toastT);toastT=setTimeout(()=>t.style.opacity=0,1800)}
+const modal=$('modal');
+function showModal(html){modal.innerHTML=`<div class="box">${html}</div>`;modal.style.display='flex'}
+function hideModal(){modal.style.display='none'}
+modal.addEventListener('click',e=>{
+  const b=e.target.closest('button');
+  if(!b){if(e.target===modal&&!won)hideModal();return}
+  const a=b.dataset.act;
+  if(a==='n1'){hideModal();newGame(1)}
+  else if(a==='n3'){hideModal();newGame(3)}
+  else hideModal();
+});
+$('bNew').onclick=()=>showModal(`<h2>新しいゲーム</h2><p>めくり方を選んでください</p>
+  <button data-act="n1">1枚めくり（かんたん）</button>
+  <button data-act="n3">3枚めくり（むずかしい）</button>
+  <button data-act="x" class="sub">キャンセル</button>`);
+$('bUndo').onclick=undo;
+$('bHint').onclick=hint;
+addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo()}
+  else if(e.key==='h'||e.key==='H')hint();
+  else if(e.key===' '){e.preventDefault();clickStock()}
+});
+addEventListener('contextmenu',e=>e.preventDefault());
+
+// ---- win ----
+const cv=$('fx'), ctx=cv.getContext('2d'); let animOn=false;
+function win(){
+  won=true; busy=false; updateStats();
+  const key='best'+drawN; const b=store[key];
+  const isNew=!b||time<b.time;
+  if(isNew){store[key]={time,moves,score};save()}
+  setTimeout(winAnim,250);
+  setTimeout(()=>{
+    const bb=store[key];
+    showModal(`<h2>🎉 クリア！</h2>
+      <p>タイム <b>${fmt(time)}</b>　手数 <b>${moves}</b><br>スコア <b>${score}</b></p>
+      <div class="best">${isNew?'★ ベストタイム更新！':'ベストタイム '+fmt(bb.time)}（${drawN}枚めくり）</div>
+      <button data-act="n${drawN}">もう一度</button>
+      <button data-act="n${drawN===1?3:1}" class="sub">${drawN===1?3:1}枚めくりで遊ぶ</button>`);
+  },1400);
+}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+function drawCard(c,x,y){
+  ctx.fillStyle='#fff';rr(x,y,CW,CH,CW*.1);ctx.fill();ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=1;ctx.stroke();
+  ctx.fillStyle=isRed(c)?'#d42b2b':'#1c1c1c';ctx.textBaseline='top';ctx.textAlign='left';
+  ctx.font=`800 ${CW*.34}px sans-serif`;ctx.fillText(RANKS[c.rank],x+CW*.06,y+CW*.05);
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`${CW*.6}px sans-serif`;
+  ctx.fillText(SUITS[c.suit],x+CW/2,y+CH*.6);
+}
+function winAnim(){
+  const dpr=Math.min(2,devicePixelRatio||1);
+  cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';cv.style.display='block';
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+  const seq=[];for(let r=13;r>=1;r--)for(let i=0;i<4;i++){const c=found[i][r-1];if(c)seq.push({c,i})}
+  let cur=null,n=0;animOn=true;
+  const step=()=>{
+    if(!animOn)return;
+    for(let s=0;s<3;s++){
+      if(!cur){
+        if(n>=seq.length){animOn=false;return}
+        const it=seq[n++]; it.c.el.style.visibility='hidden';
+        cur={c:it.c,x:colX(3+it.i),y:topY,vx:(Math.random()*3+(isMobile?1.5:2.5))*(Math.random()<.5?-1:1),vy:-Math.random()*5};
+      }
+      cur.vy+=.45;cur.x+=cur.vx;cur.y+=cur.vy;
+      if(cur.y+CH>H){cur.y=H-CH;cur.vy=-cur.vy*.78}
+      drawCard(cur.c,cur.x,cur.y);
+      if(cur.x<-CW||cur.x>W)cur=null;
+    }
+    requestAnimationFrame(step);
+  };
+  step();
+}
+
+// ---- new game ----
+function newGame(mode){
+  if(mode){drawN=mode;store.mode=mode;save()}
+  animOn=false;cv.style.display='none';clearHint();hideModal();
+  cards.forEach(c=>{c.el.style.visibility='';c.el.style.transitionDelay='';c.up=false});
+  const deck=cards.slice();
+  for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]]}
+  stock=[];waste=[];found=[[],[],[],[]];tab=[[],[],[],[],[],[],[]];
+  const dealOrder=[];
+  for(let r=0;r<7;r++)for(let i=r;i<7;i++){const c=deck.pop();c.up=(i===r);tab[i].push(c);dealOrder.push(c)}
+  stock=deck;
+  score=0;moves=0;time=0;started=false;won=false;busy=false;undoStack=[];
+  // start every card at the stock, then deal out
+  layer.classList.add('noanim');
+  cards.forEach((c,k)=>{c.el.classList.add('down');c.el.style.left=colX(0)+'px';c.el.style.top=topY+'px';c.el.style.zIndex=100+k});
+  void layer.offsetWidth;
+  layer.classList.remove('noanim');
+  dealOrder.forEach((c,k)=>c.el.style.transitionDelay=(k*22)+'ms');
+  layout();
+  setTimeout(()=>cards.forEach(c=>c.el.style.transitionDelay=''),900);
+  updateStats();
+}
+newGame();
+})();
+</script>
+</body>
+</html>
