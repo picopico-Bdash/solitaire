@@ -119,9 +119,18 @@ const $=id=>document.getElementById(id);
 const stage=$('stage'), layer=$('cards'), slotsEl=$('slots');
 
 function calcGeometry(){
-  W=Math.max(300,document.documentElement.clientWidth||innerWidth);
-  H=Math.max(300,document.documentElement.clientHeight||innerHeight);
-  compact=isMobile||W<640;               // 狭い画面はボタンを下に
+  const vw=document.documentElement.clientWidth||innerWidth;
+  const vh=document.documentElement.clientHeight||innerHeight;
+  if(isMobile){
+    // スマホ：ブラウザのアスペクト比のまま表示領域いっぱい
+    W=vw; H=vh;
+  }else{
+    // PC：9:16（縦長）でブラウザ画面に収まる最大サイズ
+    H=vh; W=Math.round(H*9/16);
+    if(W>vw){W=vw; H=Math.round(W*16/9)}
+  }
+  W=Math.max(300,W); H=Math.max(300,H);
+  compact=true;                           // 縦長画面なのでボタンは下に
   TOP=compact?40:52; BOTTOM=compact?52:0;
   GAP=compact?Math.max(4,Math.round(W*.011)):Math.round(Math.min(18,Math.max(8,W*.012)));
   const byW=(W-GAP*8)/7;
@@ -137,6 +146,7 @@ function calcGeometry(){
   WOFF=Math.round(CW*(compact?.28:.3));
   stage.classList.toggle('mobile',compact); stage.classList.toggle('pc',!compact);
   stage.style.width=W+'px'; stage.style.height=H+'px';
+  stage.style.left=Math.max(0,Math.round((vw-W)/2))+'px'; stage.style.top=Math.max(0,Math.round((vh-H)/2))+'px';
   stage.style.setProperty('--cw',CW+'px'); stage.style.setProperty('--ch',CH+'px');
 }
 calcGeometry();
