@@ -55,6 +55,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#082116;touch-action
   font-size:calc(var(--cw)*.5);line-height:1;font-family:Georgia,"Times New Roman",serif}
 .card.red{color:#d42b2b}.card.black{color:#1c1c1c}
 .card.down>*{display:none}
+/* 画像デザインのカード */
+.card.img{background:transparent center/100% 100% no-repeat;border-radius:calc(var(--cw)*.065);
+  box-shadow:0 1px 2px rgba(0,0,0,.4)}
+.card.img>*{display:none}
+.card.img.down{background-image:none!important;background-color:#fff}
 .card.down{background:#fff}
 .card.down::after{content:"";position:absolute;inset:6%;border-radius:calc(var(--cw)*.07);
   background:repeating-linear-gradient(45deg,#c73c3c 0 3px,#a92f2f 3px 6px);
@@ -109,6 +114,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#082116;touch-action
 'use strict';
 const SUITS=['♠','♥','♦','♣'];
 const RANKS=['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+// カード画像：cards/<スート>-<数字>.webp（例 cards/clubs-1.webp）。無い札は従来の描画のまま
+const SUIT_NAMES=['spades','hearts','diamonds','clubs'];
+const CARD_RATIO=690/480;
 const isMobile=matchMedia('(pointer:coarse)').matches||/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
 // ---- geometry（ブラウザの表示領域いっぱいに合わせる） ----
@@ -134,9 +142,9 @@ function calcGeometry(){
   TOP=compact?40:52; BOTTOM=compact?52:0;
   GAP=compact?Math.max(4,Math.round(W*.011)):Math.round(Math.min(18,Math.max(8,W*.012)));
   const byW=(W-GAP*8)/7;
-  const byH=(H-TOP-BOTTOM-40)/3.3/1.4;    // 上段＋場札が十分見える高さ
+  const byH=(H-TOP-BOTTOM-40)/3.3/CARD_RATIO;    // 上段＋場札が十分見える高さ
   CW=Math.floor(Math.max(28,Math.min(byW,byH,150)));
-  CH=Math.round(CW*1.4);
+  CH=Math.round(CW*CARD_RATIO);
   X0=Math.round((W-(7*CW+6*GAP))/2);
   topY=TOP+(compact?8:16);
   tabY=topY+CH+(compact?12:20);
@@ -181,6 +189,9 @@ for(let s=0;s<4;s++)for(let r=1;r<=13;r++){
   const center=r>10?`<div class="face">${RANKS[r]}</div>`:`<div class="mid">${SUITS[s]}</div>`;
   el.innerHTML=`<div class="tl">${RANKS[r]}</div><div class="tr">${SUITS[s]}</div>${center}`;
   c.el=el; layer.appendChild(el); cards.push(c);
+  const src=`cards/${SUIT_NAMES[s]}-${r}.webp`, im=new Image();
+  im.onload=()=>{c.img=im; el.style.backgroundImage=`url("${src}")`; el.classList.add('img')};
+  im.src=src;
 }
 const isRed=c=>c.suit===1||c.suit===2;
 
@@ -507,6 +518,7 @@ function win(){
 }
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
 function drawCard(c,x,y){
+  if(c.img){ctx.drawImage(c.img,x,y,CW,CH);return}
   ctx.fillStyle='#fff';rr(x,y,CW,CH,CW*.1);ctx.fill();ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=1;ctx.stroke();
   ctx.fillStyle=isRed(c)?'#d42b2b':'#1c1c1c';ctx.textBaseline='top';ctx.textAlign='left';
   ctx.font=`800 ${CW*.34}px sans-serif`;ctx.fillText(RANKS[c.rank],x+CW*.06,y+CW*.05);
